@@ -21,7 +21,7 @@ import configparser
 # Scrape the api to download the requested clips
 # Concatenate all the downloaded clips into one big file
 # Re-encode the big clip to x265 format for space savings
-to_file(open("isClipValid.log", "w+"))
+to_file(open("dailyfrigate.log", "w+"))
 config = configparser.ConfigParser()
 config.read("dailyfrigate.cfg")
 clip_path = config["General"]["clip_path"]

@@ -67,7 +67,7 @@ def fetchClipInfo(startDate, camera, zone, label):
     after = before - datetime.timedelta(days=1)
     requestxt = f"http://lenny:5000/api/events?has_clip=1&limit=99999&label={label}&camera={camera}&zone={zone}&before={before.timestamp()}&after={after.timestamp()}"
     request = requests.get(requestxt)
-    print(request)
+    print(request.json())
     jsonbody = request.json()
     return jsonbody
 

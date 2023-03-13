@@ -81,9 +81,11 @@ structlog.configure(
 
 log = structlog.get_logger()
 logging.basicConfig(
+    filename="da.log",
     format="%(message)s",
-    stream=sys.stdout,
-    level=logging.INFO,
+    # stream=sys.stdout,
+    level=logging.INFO
+  
 )
 
 
@@ -129,7 +131,7 @@ def fetchClipInfo(startDate, camera, zone, label):
     request = requests.get(requestxt)
     # print(request.json())
     jsonbody = request.json()
-    log.info(f"Fetching {len(jsonbody)} clips info for {startDate} for {camera} {zone} {label}")
+    log.info(f"Fetching {len(jsonbody)} clips info for {startDate} for {camera} {zone} {label}",startDate=startDate)
     return jsonbody
 
 def getDuration(clip):
@@ -153,12 +155,65 @@ def isClipValid(input):
 
     except ffmpeg.Error:
         log.warning(f"{input} clip not found!")
+        # streamList.remove(input)
         pass
 
     else:
         pass
 
-
+@log_call
+def cvtcopy(clip):
+    try:
+        # time.sleep(1.5)
+        filename = clip_path + str(clip) + ".mp4"
+        validClip = "http://lenny:5000/api/events/" + str(clip) + "/clip.mp4"
+        clipText = str(clipCount) + "/" + str(len(clipList))
+        ffmpeg_command = [
+            ffmpegbin,
+            #       "ffmpeg",
+            "-y",
+            # "-f",
+            # "concat",
+            # "-safe",
+            # "0",
+            "-hwaccel",
+            "auto",
+            "-i",
+            validClip,
+            "-video_track_timescale",
+            "10240",
+            # "-vf",
+            # "scale=800:600:flags=lanczos",
+            # "-vf",
+            # "drawtext=text='" + clipText + "':x=10:y=10:fontsize=48:fontcolor=white",
+            # "-c:v",
+            # "libx265",
+            # "-preset",
+            # "ultrafast",
+            # # "copy",
+            # # "-x265-params",
+            # # "pools=2",
+            # "-crf",
+            # "22",
+            # "-tag:v",
+            # "hvc1",
+            "-c",
+            "copy",
+            filename
+        ]
+        # print(ffmpeg_command)
+        pipe = subprocess.run(
+            ffmpeg_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        # print("done crunching")
+        # print(pipe.stdout)
+        # print(pipe.stderr)
+        fileList.append(filename)
+        log.info(f"Processed {filename}")
+        # print(input)
+        return fileList
+    except:
+        log.info(f"Something happened")
 
 @log_call
 def cvt265(clip):
@@ -180,8 +235,8 @@ def cvt265(clip):
         validClip,
         "-video_track_timescale",
         "10240",
-        "-vf",
-        "scale=800:600:flags=lanczos",
+        # "-vf",
+        # "scale=800:600:flags=lanczos",
         "-vf",
         "drawtext=text='" + clipText + "':x=10:y=10:fontsize=48:fontcolor=white",
         "-c:v",
@@ -216,7 +271,9 @@ def cvt265(clip):
 @log_call
 def cvth265(clip):
     # time.sleep(1.5)
+    
     try:
+        st = time.time()
         filename = clip_path + str(clip) + ".mp4"
         validClip = "http://lenny:5000/api/events/" + str(clip) + "/clip.mp4"
         clipText = str(clipCount) + "/" + str(len(clipList))
@@ -252,9 +309,10 @@ def cvth265(clip):
         ]
         # print(ffmpeg_command)
         pipe = subprocess.run(
-            ffmpeg_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ffmpeg_command
         )
-        log.info(f"Processed {filename}")
+        et = time.time()
+        log.info(f"Processed {filename}",clip=filename,duration=et-st)
         # print("done crunching")
         # print(pipe.stdout)
         # print(pipe.stderr)
@@ -263,7 +321,7 @@ def cvth265(clip):
         return fileList
     except:
         log.warning(f"Barfed on {filename}")
-        pass
+        exit(3)
 
 
 @log_call
@@ -313,16 +371,20 @@ def concatvid():
             + label
             + ".mp4",
         ]
+        pipe = subprocess.run(
+            ffmpeg_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        log.info(f"Concatenated {len(fileList)} clips together...")
     except:
         pass
 
     # print(ffmpeg_command)
-    pipe = subprocess.run(
-        ffmpeg_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-    log.info(f"Concatenated {len(fileList)} clips together...")
-    print(pipe.stdout)
-    print(pipe.stderr)
+    # pipe = subprocess.run(
+    #     ffmpeg_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    # )
+
+    # print(pipe.stdout)
+    # print(pipe.stderr)
 
 
 #    print(mp4out)
@@ -419,13 +481,13 @@ if __name__ == "__main__":
                 blurgh = isClipValid(clip)
                 # cvt265(clip) 
 
-        print(f"Processing {len(blurgh)} clips")
+        log.info(f"Processing {len(blurgh)} clips")
 
         clipCount = 0
-        for vClip in tqdm(blurgh,desc="Processing"):
+        for vClip in tqdm(blurgh):
         # Iterate through the validated clips
             clipCount += 1
-            cvth265(vClip)
+            cvtcopy(vClip)
 
         with start_action(action_type="make_concat_file"):
             for element in fileList:

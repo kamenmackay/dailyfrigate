@@ -14,7 +14,6 @@ import ffmpeg
 
 @dataclass
 class FrigateClip:
-    """Represents a single clip from Frigate"""
     id: str
     camera: str
     label: str
@@ -88,35 +87,7 @@ class FrigateArchiver:
         clips.sort(key=lambda x: x.start_time)
         return clips
 
-    def crop_snapshot(self, snapshot_data: bytes, clip: FrigateClip) -> bytes:
-        if not clip.box:
-            return snapshot_data
-
-        img = Image.open(BytesIO(snapshot_data))
-        width, height = img.size
-
-        x, y, w, h = clip.box
-        x1 = int(x * width)
-        y1 = int(y * height)
-        x2 = int((x + w) * width)
-        y2 = int((y + h) * height)
-
-        pad_x = int((x2 - x1) * 0.1)
-        pad_y = int((y2 - y1) * 0.1)
-
-        x1 = max(0, x1 - pad_x)
-        y1 = max(0, y1 - pad_y)
-        x2 = min(width, x2 + pad_x)
-        y2 = min(height, y2 + pad_y)
-
-        cropped = img.crop((x1, y1, x2, y2))
-
-        output = BytesIO()
-        cropped.save(output, format='JPEG', quality=95)
-        return output.getvalue()
-
     def process_clip(self, clip: FrigateClip, temp_dir: str):
-        # Download clip
         clip_path = os.path.join(temp_dir, f"clip_{clip.id}.mp4")
         response = requests.get(f"{self.base_url}/api/events/{clip.id}/clip.mp4", stream=True)
         response.raise_for_status()
@@ -125,7 +96,6 @@ class FrigateArchiver:
                 f.write(chunk)
         clip.download_path = clip_path
 
-        # Download thumbnail
         snapshot_path = os.path.join(temp_dir, f"snapshot_{clip.id}.jpg")
         response = requests.get(
             f"{self.base_url}/api/events/{clip.id}/thumbnail.jpg",
@@ -133,33 +103,34 @@ class FrigateArchiver:
         )
         response.raise_for_status()
         
-        cropped_data = self.crop_snapshot(response.content, clip)
         with open(snapshot_path, 'wb') as f:
-            f.write(cropped_data)
+            f.write(response.content)
         clip.snapshot_path = snapshot_path
 
-        # Get video info
         probe = ffmpeg.probe(clip_path)
         video_info = next(s for s in probe['streams'] if s['codec_type'] == 'video')
         main_width = int(video_info['width'])
         main_height = int(video_info['height'])
         
-        pip_width = main_width // 4
-        pip_height = main_height // 4
+        pip_width = main_width // 8
         x_position = main_width - pip_width - 10
         y_position = 10
 
-        # Create PiP version with overlay
         pip_path = os.path.join(temp_dir, f"pip_{clip.id}.mp4")
         
         main = ffmpeg.input(clip_path)
         overlay = (
             ffmpeg.input(snapshot_path)
-            .filter('scale', pip_width, pip_height, force_original_aspect_ratio='decrease')
-            .filter('pad', pip_width, pip_height, -1, -1, color='white')
-            # .filter('drawtext', text=f"{clip.label}: {clip.formatted_score}",
-            #        fontcolor='white', fontsize=14,
-            #        x='(w-text_w)/2', y='h-th-5')
+            .filter('scale', pip_width, -1)
+            .filter('drawtext',
+                    text=f"{clip.label}: {clip.formatted_score}",
+                    fontcolor='white',
+                    fontsize=f'{pip_width // 12}',
+                    x=f'(w-text_w)/2',
+                    y=f'h+10',
+                    shadowcolor='black',
+                    shadowx=2,
+                    shadowy=2)
         )
         
         video = ffmpeg.overlay(main, overlay, x=x_position, y=y_position)
@@ -217,14 +188,12 @@ class FrigateArchiver:
                     if i % 5 == 0:
                         self.logger.info(f"Processed {i}/{len(clips)} clips...")
                 
-                # Create concat file
                 with open(file_list_path, 'w') as f:
                     for clip in clips:
                         f.write(f"file '{clip.pip_path}'\n")
                 
                 self.logger.info(f"Creating final video...")
                 
-                # Final concatenation with x265
                 (
                     ffmpeg
                     .input(file_list_path, format='concat', safe=0)

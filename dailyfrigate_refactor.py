@@ -3,11 +3,9 @@ import requests
 import subprocess
 import ffmpeg
 import os
-import sys
 import argparse
 from eliot import start_action, to_file, log_call
 from datetime import datetime
-
 
 
 from signal import signal, SIGINT
@@ -15,8 +13,6 @@ from sys import exit
 import datetime
 import time
 from tqdm import tqdm
-from signal import pause
-import json
 import configparser
 import structlog
 import logging
@@ -64,7 +60,7 @@ structlog.configure(
             }
         ),
         # Render the final event dict as JSON.
-        structlog.processors.JSONRenderer()
+        structlog.processors.JSONRenderer(),
     ],
     # `wrapper_class` is the bound logger that you get back from
     # get_logger(). This one imitates the API of `logging.Logger`.
@@ -84,8 +80,7 @@ logging.basicConfig(
     filename="da.log",
     format="%(message)s",
     # stream=sys.stdout,
-    level=logging.INFO
-  
+    level=logging.INFO,
 )
 
 
@@ -122,20 +117,26 @@ def fetchClipInfo(startDate, camera, zone, label):
     # zone = "road"
     # camera = "frontgate"
     before = cvt_to_epoch(startDate)
+    # after = cvt_to_epoch(startDate)
     print(before)
     # print(type(before))
 
     after = before - datetime.timedelta(days=1)
-    requestxt = f"http://lenny:5000/api/events?has_clip=1&limit=99999&label={label}&camera={camera}&zone={zone}&before={before.timestamp()}&after={after.timestamp()}"
+    requestxt = f"http://lenny:5000/api/events?has_clip=1&limit=500&label={label}&camera={camera}&zone={zone}&before={before.timestamp()}&after={after.timestamp()}"
     # requestxt = f"http://lenny:5000/api/events?has_clip=1&limit=99999&label={label}&camera={camera}&zone={zone}&before={before.timestamp()}&after={after.timestamp()}"
     request = requests.get(requestxt)
     # print(request.json())
     jsonbody = request.json()
-    log.info(f"Fetching {len(jsonbody)} clips info for {startDate} for {camera} {zone} {label}",startDate=startDate)
+    log.info(
+        f"Fetching {len(jsonbody)} clips info for {startDate} for {camera} {zone} {label}",
+        startDate=startDate,
+    )
     return jsonbody
+
 
 def getDuration(clip):
     pass
+
 
 @log_call
 def isClipValid(input):
@@ -143,10 +144,10 @@ def isClipValid(input):
     # time.sleep(.5)
     # print(input)
     filename = str(input) + "-" + str(label) + ".mp4"
-    fullPath = output_path + filename
+    output_path + filename
     try:
-        vidinfo = ffmpeg.probe(
-            "http://lenny:5000/api/events/" + str(input) + "/clip.mp4"
+        ffmpeg.probe(
+            "http://lenny:5000/api/events/" + str(input) + "/clip.mp4", rw_timeout=20000000
         )
         # print(vidinfo)
         streamList.append(input)
@@ -155,65 +156,11 @@ def isClipValid(input):
 
     except ffmpeg.Error:
         log.warning(f"{input} clip not found!")
-        # streamList.remove(input)
         pass
 
     else:
         pass
 
-@log_call
-def cvtcopy(clip):
-    try:
-        # time.sleep(1.5)
-        filename = clip_path + str(clip) + ".mp4"
-        validClip = "http://lenny:5000/api/events/" + str(clip) + "/clip.mp4"
-        clipText = str(clipCount) + "/" + str(len(clipList))
-        ffmpeg_command = [
-            ffmpegbin,
-            #       "ffmpeg",
-            "-y",
-            # "-f",
-            # "concat",
-            # "-safe",
-            # "0",
-            "-hwaccel",
-            "auto",
-            "-i",
-            validClip,
-            "-video_track_timescale",
-            "10240",
-            # "-vf",
-            # "scale=800:600:flags=lanczos",
-            # "-vf",
-            # "drawtext=text='" + clipText + "':x=10:y=10:fontsize=48:fontcolor=white",
-            # "-c:v",
-            # "libx265",
-            # "-preset",
-            # "ultrafast",
-            # # "copy",
-            # # "-x265-params",
-            # # "pools=2",
-            # "-crf",
-            # "22",
-            # "-tag:v",
-            # "hvc1",
-            "-c",
-            "copy",
-            filename
-        ]
-        # print(ffmpeg_command)
-        pipe = subprocess.run(
-            ffmpeg_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        # print("done crunching")
-        # print(pipe.stdout)
-        # print(pipe.stderr)
-        fileList.append(filename)
-        log.info(f"Processed {filename}")
-        # print(input)
-        return fileList
-    except:
-        log.info(f"Something happened")
 
 @log_call
 def cvt265(clip):
@@ -235,48 +182,47 @@ def cvt265(clip):
         validClip,
         "-video_track_timescale",
         "10240",
-        # "-vf",
-        # "scale=800:600:flags=lanczos",
+#        "-vf",
+#        "scale=800:600:flags=lanczos",
         "-vf",
         "drawtext=text='" + clipText + "':x=10:y=10:fontsize=48:fontcolor=white",
         "-c:v",
         "libx265",
         "-preset",
         "ultrafast",
-        # # "copy",
-        # # "-x265-params",
-        # # "pools=2",
+        # "copy",
+        "-x265-params",
+        "pools=1",
         "-crf",
         "22",
         "-tag:v",
         "hvc1",
         # "-c",
         # "copy",
-        filename
+        filename,
     ]
     # print(ffmpeg_command)
-    pipe = subprocess.run(
-        ffmpeg_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
+    subprocess.run(ffmpeg_command,stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     # print("done crunching")
     # print(pipe.stdout)
     # print(pipe.stderr)
     fileList.append(filename)
-    log.info(f"Processed {filename}")
+    log.info(f"Downloaded {filename} to {clip_path}")
     # print(input)
     return fileList
 
     # print(ffmpeg_command)
 
+
 @log_call
 def cvth265(clip):
     # time.sleep(1.5)
-    
+
     try:
         st = time.time()
         filename = clip_path + str(clip) + ".mp4"
         validClip = "http://lenny:5000/api/events/" + str(clip) + "/clip.mp4"
-        clipText = str(clipCount) + "/" + str(len(clipList))
+        clipText = str(clipCount) + "/" + str(len(blurgh))
         ffmpeg_command = [
             ffmpegbin,
             #       "ffmpeg",
@@ -305,14 +251,14 @@ def cvth265(clip):
             "main10",
             "-tag:v",
             "hvc1",
-            filename
+            filename,
         ]
         # print(ffmpeg_command)
-        pipe = subprocess.run(
-            ffmpeg_command
+        subprocess.run(
+            ffmpeg_command, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
         )
         et = time.time()
-        log.info(f"Processed {filename}",clip=filename,duration=et-st)
+        log.info(f"Processed {filename}", clip=filename, duration=et - st)
         # print("done crunching")
         # print(pipe.stdout)
         # print(pipe.stderr)
@@ -326,7 +272,6 @@ def cvth265(clip):
 
 @log_call
 def concatvid():
-
     log.info(f"Concatenating {len(fileList)} clips together...")
 
     try:
@@ -371,12 +316,12 @@ def concatvid():
             + label
             + ".mp4",
         ]
-        pipe = subprocess.run(
-            ffmpeg_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        subprocess.run(ffmpeg_command)
+        log.info(
+            f"Concatenated {len(fileList)} clips together to {output_path}/{camera}/{zone}/{label}/{clipDate}/{camera}/{zone}/{label}.mp4"
         )
-        log.info(f"Concatenated {len(fileList)} clips together...")
     except:
-        pass
+        print("some sort of error")
 
     # print(ffmpeg_command)
     # pipe = subprocess.run(
@@ -415,11 +360,9 @@ def sendToInflux(msg: str, start, end):
         "precision": "ms",
     }
 
-    data = 'events title="grabclips",text="flrug",tags="blurgs"'
-    data1 = 'events title="grabclips",text="flrug",tags="blurgs"'
-    data2 = f"events title=\"{title}\",text=\"{msg}\",tags=\"{tags}\",timeEnd={end}"
+    data2 = f'events title="{title}",text="{msg}",tags="{tags}",timeEnd={end}'
 
-    response = requests.post(
+    requests.post(
         "http://lenny:8086/write", params=params, headers=headers, data=data2
     )
     # print(response.raw())
@@ -438,9 +381,7 @@ def sendtopushover(msg):
     )
 
 
-
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(description="Process some video.")
     parser.add_argument("clipdate", type=str)
     parser.add_argument("camera", type=str)
@@ -462,32 +403,31 @@ if __name__ == "__main__":
     clipInfo = fetchClipInfo(clipDate, camera, zone, label)
     # # Reverse the list so the earliest clips are at the start of the concatted video
     global clipList
-    clipList = [event["id"] for event in clipInfo if event["has_clip"] == True ]
+    clipList = [event["id"] for event in clipInfo if event["has_clip"] is True]
     clipList = sorted(list(clipList))
     startTime = time.time_ns()
-    
 
     # for x in clipList:
     #     isClipValid(x)
     global clipCount
-    
+
     # clipDuration = { }
     if clipList:
         print(f"There are {len(clipList)} clips to be processed")
         print(f"Validating {len(clipList)} clips")
-        for clip in tqdm(clipList,desc=f"Validating"):
-        # Validate the clips first 
-                # clipCount += 1
-                blurgh = isClipValid(clip)
-                # cvt265(clip) 
+        for clip in tqdm(clipList, desc="Validating"):
+            # Validate the clips first
+            # clipCount += 1
+            blurgh = isClipValid(clip)
+            # cvt265(clip)
 
-        log.info(f"Processing {len(blurgh)} clips")
+#        log.info(f"Processing {len(blurgh)} clips")
 
         clipCount = 0
         for vClip in tqdm(blurgh):
-        # Iterate through the validated clips
+            # Iterate through the validated clips
             clipCount += 1
-            cvtcopy(vClip)
+            cvt265(vClip)
 
         with start_action(action_type="make_concat_file"):
             for element in fileList:
@@ -496,25 +436,16 @@ if __name__ == "__main__":
 
         with start_action(action_type="make_big_file"):
             concatvid()
-            cleanup(fileList)
-    
-    
-        # t2 = datetime.datetime.now()
- 
-        # cvtEnd = int(time.time() * 1000000000)
-    # sendtopushover(
-    # f"{clipDate} {camera} {zone} {label} re-encoding job is done. \n {len(fileList)} clips were processed. It took {t2 -t1} to complete."
-    # )
+            # cleanup(fileList)
 
-        # msgString = f"{camera} {zone} {label} re-encoding job is done. \n {len(fileList)} clips were processed. It took {t2 -t1} to complete."
-        # sendToInflux(msgString,cvtStart,cvtEnd)
+        t2 = datetime.datetime.now()
+
+        # cvtEnd = int(time.time() * 1000000000)
+        sendtopushover(
+            f"{clipDate} {camera} {zone} {label} re-encoding job is done. \n {len(fileList)} clips were processed. It took {t2 -t1} to complete."
+        )
+
+    # msgString = f"{camera} {zone} {label} re-encoding job is done. \n {len(fileList)} clips were processed. It took {t2 -t1} to complete."
+    # sendToInflux(msgString,cvtStart,cvtEnd)
     else:
         log.critical(f"No clips to process for {clipDate} for {camera} {zone} {label}")
-
-
- 
-
-
-
-
-    

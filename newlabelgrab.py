@@ -72,7 +72,8 @@ class FrigateArchiver:
             'before': int(end_date.timestamp()),
             'after': int(start_date.timestamp()),
             'cameras': camera,
-            'has_clip': 1
+            'has_clip': 1,
+            'limit': -1
         }
         
         if zone:

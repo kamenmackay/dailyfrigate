@@ -1,3 +1,17 @@
+#!/usr/bin/env python3
+# -*- python-script -*-
+# type: script
+"""
+dependencies:
+  - dataclasses
+  - datetime
+  - requests
+  - argparse
+  - typing
+  - pillow
+  - io
+"""
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import requests
@@ -219,6 +233,15 @@ class FrigateArchiver:
                     .overwrite_output()
                     .run(capture_stdout=True, capture_stderr=True)
                 )
+                # (
+                #     ffmpeg.input(file_list_path, format='concat', safe=0) 
+                #     .output(output_path, 
+                #         vcodec='libaom-av1',  # Use AV1 codec
+                #         r=20,                 # Framerate
+                #         acodec='mp3')        # Audio codec remains the same
+                #         .overwrite_output() 
+                #         .run(capture_stdout=True, capture_stderr=True)
+                # )
                 
             self.logger.info(f"Successfully archived events to {output_filename}")
             

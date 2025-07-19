@@ -1,0 +1,9 @@
+isClipValid.log
+dailyfrigate.cfg
+concat.txt
+dailyfrigate.log
+.venv/*
+bin/*
+include/*
+lib/*
+*.mp4
